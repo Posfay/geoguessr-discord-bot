@@ -1,13 +1,17 @@
-import random
+import io
+
+import requests
 import discord
 from discord.ext import commands
 import logging
 import countries
 from countries import RoundStore
+from image_generator import ImageGenerator
 
 # Bot Access Token -----------------------------------------------------------------------------------------------------
-f = open("token.txt", "r")
+f = open("discord_token.txt", "r")
 token = f.read()
+f.close()
 # Bot Access Token -----------------------------------------------------------------------------------------------------
 
 # Logger setup ---------------------------------------------------------------------------------------------------------
@@ -51,6 +55,8 @@ class GuessrBot(commands.Bot):
 
     def set_next_round(self):
         self.round_store.reset()
+        self.waiting_for_image = False
+        self.waiting_for_country = False
 
     async def on_ready(self):
         print("Bot connected")
@@ -66,34 +72,48 @@ class GuessrBot(commands.Bot):
 
         winner = prev_message.author
         self.last_winner_id = winner.id
-        await winner.send("Na gratu, most kuldj egy ujabb kepet, aztan ird le, hogy melyik orszagbol valo!")
+        await winner.send("Na gratu, most kuldj egy ujabb kepet, aztan ird le, hogy melyik orszagbol valo! "
+                          "Vagy irj valamit (pl. \"ok\"), hogy generaljak egy random kepet!")
         self.waiting_for_image = True
 
-    # async def on_message(self, message):
-    #     if len(message.attachments) >= 1:
-    #         url = message.attachments[0].url
-    #         await message.channel.send(url)
-    #
-    #     await self.process_commands(message)
-
     async def on_message(self, message):
-        if self.waiting_for_image and message.author.id == self.last_winner_id:
-            self.round_store.set_image(message.attachments[0].url)
-            await message.channel.send("Szuper, most johet az orszag")
-            self.waiting_for_image = False
-            self.waiting_for_country = True
-            return
+        if self.waiting_for_image \
+                and message.channel.type == discord.ChannelType.private \
+                and message.author.id == self.last_winner_id:
+            if len(message.attachments) >= 1:
+                self.round_store.set_image(message.attachments[0].url)
+                await message.channel.send("Szuper, most johet az orszag")
+                self.waiting_for_image = False
+                self.waiting_for_country = True
+                return
+            else:
+                await message.channel.send("Random kep generalasa...")
+                bot.set_next_round()
+                country_code, discord_image_file = ImageGenerator().generate_image()
+                bot.round_store.set_correct_country(country_code)
+                bot.round_store.set_image_file(discord_image_file)
+                guess_channel = self.get_channel(self.guess_channel_id)
+                await guess_channel.send("Kep generalva")
+                await guess_channel.send(file=discord_image_file)
+                await message.channel.send("Random kep generalva, nincs mas teendod!")
+                return
 
-        if self.waiting_for_country and message.author.id == self.last_winner_id:
-            self.round_store.set_correct_country(message.content)
-            await message.channel.send("Megvagyunk")
-            self.waiting_for_country = False
+        if self.waiting_for_country \
+                and message.channel.type == discord.ChannelType.private \
+                and message.author.id == self.last_winner_id:
+            if self.round_store.get_country(message.content) is not None:
+                self.round_store.set_correct_country(message.content)
+                await message.channel.send("Megvagyunk")
+                self.waiting_for_country = False
 
-            guess_channel = self.get_channel(self.guess_channel_id)
-            await guess_channel.send(self.round_store.image)
-            winner = message.author
-            await guess_channel.send(f"Bekuldte: {winner.mention}")
-            return
+                guess_channel = self.get_channel(self.guess_channel_id)
+                await guess_channel.send(self.round_store.image)
+                winner = message.author
+                await guess_channel.send(f"Bekuldte: {winner.mention}")
+                return
+            else:
+                await message.channel.send(f"{message.content} nem ervenyes orszag, kuldj egy masikat")
+                return
 
         if message.channel.id == self.guess_channel_id and self.round_store.active_round:
             if 2 <= len(message.content) <= 50:
@@ -120,9 +140,21 @@ async def channel(ctx):
 
 @bot.command()
 async def image(ctx):
-    if bot.round_store.image == "":
+    if bot.round_store.image == "" and bot.round_store.image_file is None:
         await ctx.message.channel.send("Meg nincs ervenyes kep")
-    await ctx.message.channel.send(bot.round_store.image)
+        return
+    if bot.round_store.image == "":
+        await ctx.message.channel.send(file=bot.round_store.image_file)
+        return
+    if bot.round_store.image_file is None:
+        await ctx.message.channel.send(bot.round_store.image)
+        return
+
+
+@bot.command()
+async def guesses(ctx):
+    guessed_countries_str = str(bot.round_store.get_guessed_countries())
+    await ctx.message.channel.send(guessed_countries_str)
 
 
 @bot.command()
@@ -133,5 +165,16 @@ async def setcountry(ctx, country):
         await ctx.message.channel.send(f"{bot.round_store.correct_country_name} beallitva megoldasnak")
     else:
         await ctx.message.channel.send(f"\"{country}\" nem ervenyes orszag")
+
+
+@bot.command()
+async def generate(ctx):
+    await ctx.message.channel.send("Random kep generalasa...")
+    bot.set_next_round()
+    country_code, discord_image_file = ImageGenerator().generate_image()
+    bot.round_store.set_correct_country(country_code)
+    bot.round_store.set_image_file(discord_image_file)
+    await ctx.message.channel.send("Kep generalva")
+    await ctx.message.channel.send(file=discord_image_file)
 
 bot.run(token)
