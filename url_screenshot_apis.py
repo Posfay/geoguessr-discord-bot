@@ -1,11 +1,13 @@
-import requests
+import aiohttp
 
 
-class URLToSSApi:
+class AsyncURLToSSApi:
     def __init__(self):
         f = open("img_gen_token.txt", "r")
         self.img_gen_token = f.read()
         f.close()
+
+        self.session = aiohttp.ClientSession()
 
         self.base_url = "https://url-to-screenshot.p.rapidapi.com/get"
         self.headers = {
@@ -14,8 +16,8 @@ class URLToSSApi:
             "X-RapidAPI-Key": self.img_gen_token
         }
 
-    def get_querystring(self, screenshot_url, width=1000, timeout=5):
-        req_querystring = {
+    def get_params(self, screenshot_url, width=1000, timeout=5):
+        params = {
             "url": screenshot_url,
             "base64": "0",
             "width": width,
@@ -23,7 +25,7 @@ class URLToSSApi:
             "mobile": "false",
             "height": "-1"
         }
-        return req_querystring
+        return params
 
     def get_base_url(self):
         return self.base_url
@@ -31,12 +33,11 @@ class URLToSSApi:
     def get_headers(self):
         return self.headers
 
-    def send_request(self, screenshot_url, width=1000, timeout=5):
-        req_querystring = self.get_querystring(screenshot_url, width, timeout)
-        response = requests.request(
-            "GET",
+    async def send_request(self, screenshot_url, width=1000, timeout=5):
+        async with self.session.get(
             self.get_base_url(),
             headers=self.get_headers(),
-            params=req_querystring
-        )
-        return response
+            params=self.get_params(screenshot_url, width, timeout)
+        ) as response:
+            image_data = await response.content.read()
+            return image_data

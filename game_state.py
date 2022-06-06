@@ -2,6 +2,7 @@ import io
 import pandas
 import discord
 import flag
+
 from image_generator import ImageGenerator
 
 CHECK_MARK = '\N{WHITE HEAVY CHECK MARK}'
@@ -18,7 +19,6 @@ class RoundState:
         self.correct_country_alpha3 = ""
         self.active_round = False
         self.image = ""
-        self.image_buffer_str = None
 
     def reset(self):
         self.guessed_countries = []
@@ -27,7 +27,6 @@ class RoundState:
         self.correct_country_alpha3 = ""
         self.active_round = False
         self.image = ""
-        self.image_buffer_str = None
 
     def get_country(self, country_str):
         name = alpha2 = alpha3 = None
@@ -71,9 +70,6 @@ class RoundState:
     def set_image(self, img):
         self.image = img
 
-    def set_image_buffer_str(self, img_buffer_str):
-        self.image_buffer_str = img_buffer_str
-
     def get_guessed_countries(self):
         self.guessed_countries.sort()
         return self.guessed_countries.copy()
@@ -100,6 +96,7 @@ class GameState:
         self.waiting_for_country = False
         self.winners = []
         self.last_winner = 0
+        self.image_generator = ImageGenerator()
 
     def set_guess_channel_id(self, guess_channel):
         self.guess_channel = guess_channel
@@ -114,24 +111,19 @@ class GameState:
         await message.channel.send(guessed_countries_str)
 
     async def get_image(self, message):
-        if self.round_state.image == "" and self.round_state.image_buffer_str is None:
+        if self.round_state.image == "":
             await message.channel.send("Meg nincs ervenyes kep")
             return
-        if self.round_state.image == "":
-            await message.channel.send(file=discord.File(io.BytesIO(self.round_state.image_buffer_str),
-                                                         filename="img.png"))
-            return
-        if self.round_state.image_buffer_str is None:
-            await message.channel.send(self.round_state.image)
-            return
+        await message.channel.send(self.round_state.image)
 
     async def generate_image(self):
         self.set_next_round()
-        country_code, image_buffer_str = ImageGenerator().generate_image()
+        country_code, image_buffer_str = await self.image_generator.generate_image()
         self.round_state.set_correct_country(country_code)
-        self.round_state.set_image_buffer_str(image_buffer_str)
         await self.guess_channel.send("Kep generalva")
-        await self.guess_channel.send(file=discord.File(io.BytesIO(image_buffer_str), filename="img.png"))
+        image_message = await self.guess_channel.send(file=discord.File(io.BytesIO(image_buffer_str), filename="img.png"))
+        image_url = image_message.attachments[0].url
+        self.round_state.set_image(image_url)
 
     async def win_procedure(self, message):
         await message.channel.send(self.round_state.get_guessed_countries())
@@ -167,6 +159,7 @@ class GameState:
         else:
             await message.channel.send("Random kep generalasa...")
             await self.generate_image()
+            self.last_winner = 0
             await message.channel.send("Random kep generalva, nincs mas teendod!")
             return
 
