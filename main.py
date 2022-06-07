@@ -22,7 +22,7 @@ logger.addHandler(handler)
 github_url = 'https://github.com/Posfay/geoguessr-discord-bot'
 description = f'''GeoGuessr Bot
 
-Guess the country based on an image. The player, who guesses right, could either send a picture of their own, or 
+Guess the country based on an image. The player who guesses right, could either send a picture of their own, or 
 let the bot generate the next location.
 
 Follow the project on GitHub: {github_url}'''
@@ -51,12 +51,14 @@ class GuessrBot(commands.Bot):
             for key in self.guild_games:
 
                 # Waiting for image
-                if message.author.id == self.guild_games[key].last_winner and self.guild_games[key].waiting_for_image:
+                if message.author.id == self.guild_games[key].last_winner.id \
+                        and self.guild_games[key].waiting_for_image:
                     await self.guild_games[key].handle_waiting_for_image(message)
                     break
 
                 # Waiting for country
-                if message.author.id == self.guild_games[key].last_winner and self.guild_games[key].waiting_for_country:
+                if message.author.id == self.guild_games[key].last_winner.id \
+                        and self.guild_games[key].waiting_for_country:
                     await self.guild_games[key].handle_waiting_for_country(message)
                     break
 
@@ -80,7 +82,12 @@ async def channel(ctx):
         else:
             bot.guild_games[ctx.guild.id] = GameState()
             bot.guild_games[ctx.guild.id].guess_channel = ctx.channel
-    await ctx.message.channel.send(f"{ctx.message.channel.mention} beallitva csatornanak")
+    embed = discord.Embed(
+        title="Channel",
+        description=f"{ctx.channel.mention} set as guessing channel!",
+        color=discord.Color.green()
+    )
+    await ctx.message.channel.send(embed=embed)
 
 
 @bot.command()
@@ -101,7 +108,12 @@ async def guesses(ctx):
 async def generate(ctx):
     if ctx.channel.type != discord.ChannelType.private:
         if ctx.guild.id in bot.guild_games and bot.guild_games[ctx.guild.id].guess_channel.id == ctx.channel.id:
-            await ctx.message.channel.send("Random kep generalasa...")
+            embed = discord.Embed(
+                title="Generating Random Location",
+                description="This might take a couple of seconds...",
+                color=discord.Color.dark_blue()
+            )
+            await bot.guild_games[ctx.guild.id].guess_channel.send(embed=embed)
             await bot.guild_games[ctx.guild.id].generate_image()
 # Bot commands ---------------------------------------------------------------------------------------------------------
 
