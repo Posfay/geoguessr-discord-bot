@@ -1,13 +1,16 @@
+import os
+
 import discord
 from discord.ext import commands
 import logging
+from dotenv import load_dotenv
 
 from game_state import GameState
 
+load_dotenv()
+
 # Bot Access Token -----------------------------------------------------------------------------------------------------
-f = open("discord_token.txt", "r")
-token = f.read()
-f.close()
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 # Bot Access Token -----------------------------------------------------------------------------------------------------
 
 # Logger setup ---------------------------------------------------------------------------------------------------------
@@ -78,10 +81,10 @@ bot = GuessrBot(command_prefix='?', activity=activity, description=description, 
 async def channel(ctx):
     if ctx.channel.type != discord.ChannelType.private:
         if ctx.guild.id in bot.guild_games:
-            bot.guild_games[ctx.guild.id].guess_channel = ctx.channel
+            bot.guild_games[ctx.guild.id].set_guess_channel(ctx.channel)
         else:
             bot.guild_games[ctx.guild.id] = GameState()
-            bot.guild_games[ctx.guild.id].guess_channel = ctx.channel
+            bot.guild_games[ctx.guild.id].set_guess_channel(ctx.channel)
     embed = discord.Embed(
         title="Channel",
         description=f"{ctx.channel.mention} set as guessing channel!",
@@ -95,6 +98,13 @@ async def image(ctx):
     if ctx.channel.type != discord.ChannelType.private:
         if ctx.guild.id in bot.guild_games and bot.guild_games[ctx.guild.id].guess_channel.id == ctx.channel.id:
             await bot.guild_games[ctx.guild.id].get_image(ctx.message)
+
+
+@bot.command()
+async def helpme(ctx):
+    if ctx.channel.type != discord.ChannelType.private:
+        if ctx.guild.id in bot.guild_games and bot.guild_games[ctx.guild.id].guess_channel.id == ctx.channel.id:
+            await bot.guild_games[ctx.guild.id].handle_help(ctx.message)
 
 
 @bot.command()
@@ -119,5 +129,5 @@ async def generate(ctx):
 
 
 # Running the bot ------------------------------------------------------------------------------------------------------
-bot.run(token)
+bot.run(DISCORD_TOKEN)
 # Running the bot ------------------------------------------------------------------------------------------------------

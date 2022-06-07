@@ -18,6 +18,7 @@ class RoundState:
         self.correct_country_name = ""
         self.correct_country_alpha2 = ""
         self.correct_country_alpha3 = ""
+        self.region = ""
         self.active_round = False
         self.image = ""
         self.generated_image = False
@@ -27,44 +28,34 @@ class RoundState:
         self.correct_country_name = ""
         self.correct_country_alpha2 = ""
         self.correct_country_alpha3 = ""
+        self.region = ""
         self.active_round = False
         self.image = ""
         self.generated_image = False
 
     def get_country(self, country_str):
-        name = alpha2 = alpha3 = None
-
+        row = None
         if len(country_str) == 2:
             country_str = self.flag.dflagize(country_str, subregions=False).lower()
             if country_str == "gb":
                 country_str = "uk"
             row = self.all_countries.loc[self.all_countries["alpha2"].str.lower() == country_str.lower()]
-            if row.empty:
-                return None, None, None
-            name = row["name"].values[0]
-            alpha2 = row["alpha2"].values[0]
-            alpha3 = row["alpha3"].values[0]
-
         elif len(country_str) == 3:
             row = self.all_countries.loc[self.all_countries["alpha3"].str.lower() == country_str.lower()]
-            if row.empty:
-                return None, None, None
-            name = row["name"].values[0]
-            alpha2 = row["alpha2"].values[0]
-            alpha3 = row["alpha3"].values[0]
-
         elif len(country_str) > 3:
             row = self.all_countries.loc[self.all_countries["name"].str.lower() == country_str.lower()]
-            if row.empty:
-                return None, None, None
-            name = row["name"].values[0]
-            alpha2 = row["alpha2"].values[0]
-            alpha3 = row["alpha3"].values[0]
 
-        return name, alpha2, alpha3
+        if row.empty:
+            return None, None, None, None
+        name = row["name"].values[0]
+        alpha2 = row["alpha2"].values[0]
+        alpha3 = row["alpha3"].values[0]
+        region = row["region"].values[0]
+        return name, alpha2, alpha3, region
 
     def set_correct_country(self, country):
-        self.correct_country_name, self.correct_country_alpha2, self.correct_country_alpha3 = self.get_country(country)
+        country_data = self.get_country(country)
+        self.correct_country_name, self.correct_country_alpha2, self.correct_country_alpha3, self.region = country_data
         if self.correct_country_name is None:
             return False
         self.active_round = True
@@ -81,7 +72,7 @@ class RoundState:
         return self.guessed_countries.copy()
 
     def guess_country(self, country):
-        name, alpha2, alpha3 = self.get_country(country)
+        name, alpha2, alpha3, region = self.get_country(country)
         if name is None:
             return None
 
@@ -104,10 +95,10 @@ class GameState:
         self.last_winner = None
         self.image_generator = ImageGenerator()
 
-    def set_guess_channel_id(self, guess_channel):
+    def set_guess_channel(self, guess_channel):
         self.guess_channel = guess_channel
 
-    def set_next_round(self):
+    def next_round(self):
         self.round_state.reset()
         self.waiting_for_image = False
         self.waiting_for_country = False
@@ -122,9 +113,11 @@ class GameState:
             )
             await message.channel.send(embed=embed)
             return
+
         embed_count = int(guesses_count / GUESSES_PAGE_SIZE) + 1
         if guesses_count % GUESSES_PAGE_SIZE == 0:
             embed_count -= 1
+
         for i in range(0, guesses_count, GUESSES_PAGE_SIZE):
             page = "\n\n".join(self.round_state.get_guessed_countries()[i:i + GUESSES_PAGE_SIZE])
             embed = discord.Embed(
@@ -144,6 +137,7 @@ class GameState:
             )
             await message.channel.send(embed=embed)
             return
+
         embed = None
         if self.round_state.generated_image:
             embed = discord.Embed(
@@ -161,7 +155,7 @@ class GameState:
         await message.channel.send(self.round_state.image)
 
     async def generate_image(self):
-        self.set_next_round()
+        self.next_round()
         country_code, image_buffer_str = await self.image_generator.generate_image()
         self.round_state.set_correct_country(country_code)
         embed = discord.Embed(
@@ -186,7 +180,7 @@ class GameState:
             color=discord.Color.green()
         )
         await message.channel.send(embed=embed)
-        self.set_next_round()
+        self.next_round()
 
         self.last_winner = message.author
         self.winners.append(message.author)
@@ -212,6 +206,15 @@ class GameState:
                 await self.win_procedure(message)
             elif not success:
                 await message.add_reaction(CROSS_MARK)
+
+    async def handle_help(self, message):
+        region_help = "the Americas" if self.round_state.region == "Americas" else f"{self.round_state.region}"
+        embed = discord.Embed(
+            title="Help",
+            description=f"So you could use some help here? Well, the country is in **{region_help}**.",
+            color=discord.Color.gold()
+        )
+        await message.channel.send(embed=embed)
 
     async def handle_waiting_for_image(self, message):
         if len(message.attachments) >= 1:

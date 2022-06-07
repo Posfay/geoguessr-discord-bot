@@ -1,19 +1,20 @@
+import os
 import aiohttp
+from dotenv import load_dotenv
+
+load_dotenv()
+
+RAPID_API_KEY = os.getenv('RAPID_API_KEY')
 
 
 class AsyncURLToSSApi:
     def __init__(self):
-        f = open("img_gen_token.txt", "r")
-        self.img_gen_token = f.read()
-        f.close()
-
         self.session = aiohttp.ClientSession()
-
         self.base_url = "https://url-to-screenshot.p.rapidapi.com/get"
         self.headers = {
             "Accept": "image/png",
             "X-RapidAPI-Host": "url-to-screenshot.p.rapidapi.com",
-            "X-RapidAPI-Key": self.img_gen_token
+            "X-RapidAPI-Key": RAPID_API_KEY
         }
 
     def get_params(self, screenshot_url, width=1000, timeout=5):
